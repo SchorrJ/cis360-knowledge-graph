@@ -571,6 +571,35 @@ def extract_text_from_pdf(f):
 EXTRACT_PROMPT = """Extract structured knowledge graph data from this research paper.
 Only extract information explicitly stated. Never hallucinate.
 
+CRITICAL UNCERTAINTY EXTRACTION RULES - read carefully:
+
+U1 (Conception uncertainty): Ambiguity in how the real-world phenomenon is DEFINED or ABSTRACTED.
+Look for: vague definitions, subjective classifications, ambiguous scope, assumptions about what counts as an event.
+Example phrases: "assumed to", "defined as", "considered as", "approximated as", "treated as constant"
+
+U2 (Measurement uncertainty): Problems with HOW DATA WAS COLLECTED or MEASURED.
+This is the most commonly missed field. Search the ENTIRE paper for ANY of these:
+- Sensor limitations, sensor errors, noise, signal interference
+- Missing data, data gaps, removed data entries, filtered outliers
+- Spatial resolution limits, temporal resolution limits, sampling frequency mismatches
+- Approximations used because direct measurement was unavailable
+- Interpolation between measurement stations
+- Data collected from a different location/time than where it was needed
+- Privacy alterations, anonymization affecting data
+- Proxy measurements used instead of direct measurements
+Example phrases: "missing values were removed", "linear approximation", "sampled yearly but needed monthly",
+"some areas do not cover any station", "approximated correspondingly", "not directly measured",
+"collected from nearby stations", "resolution", "noise", "signal-to-noise"
+
+U3 (Analysis uncertainty): Limitations of the ALGORITHM or MODEL itself.
+Look for: model assumptions, overfitting risk, generalization limits, black-box nature, training data bias.
+Example phrases: "assumes linear", "black-box", "limited generalization", "may not generalize",
+"training error", "dropout", "overfitting", "bias"
+
+For EVERY dataset, search the full paper text for any mention of that dataset having
+measurement problems, approximations, missing data, or collection limitations.
+Do NOT leave U2 empty unless the paper truly says nothing about data quality for that dataset.
+
 Return ONLY valid JSON, no markdown:
 {{
   "doi_sheet": {{
@@ -583,15 +612,15 @@ Return ONLY valid JSON, no markdown:
   "fusion_methods": [{{
     "MethodName": "", "MethodKey": "UUID v4", "DOI": "",
     "Description": "max 130 chars",
-    "U1": "Conception uncertainty or empty string",
-    "U3": "Analysis uncertainty or empty string",
+    "U1": "Quote or describe the conception uncertainty from the paper, or empty string",
+    "U3": "Quote or describe the analysis uncertainty from the paper, or empty string",
     "OutputData": ""
   }}],
   "datasets": [{{
     "DOI": "", "DataName": "", "DatasetURL": "", "MethodKey": "",
     "DataType": "", "SensorType": "", "SpatialCoverage": "",
     "TemporalCoverage": "", "CollectionMethod": "",
-    "U2": "Measurement uncertainty or empty string",
+    "U2": "Quote or describe the measurement uncertainty for THIS dataset from the paper. Check for missing data, approximations, resolution limits, interpolation, sensor noise. Do NOT leave empty if any such issue is mentioned.",
     "Format": "", "License": "", "Provenance": ""
   }}]
 }}
@@ -619,7 +648,7 @@ SCHEMA:
 Knowledge Graph: {graph}"""
 
 def extract_paper(text):
-    raw = call_api(EXTRACT_PROMPT.format(text=text[:4500]), 2000)
+    raw = call_api(EXTRACT_PROMPT.format(text=text[:12000]), 2000)
     return json.loads(raw.replace("```json","").replace("```","").strip())
 
 def ingest_parsed(parsed):
@@ -831,15 +860,7 @@ with st.sidebar:
     st.markdown('<div class="lab-header">Fusion Lab</div>', unsafe_allow_html=True)
     st.markdown('<div class="lab-sub">CIS 360 / Knowledge Graph</div>', unsafe_allow_html=True)
 
-    # API Key
-    st.markdown('<div class="section-label">API Key</div>', unsafe_allow_html=True)
-    api_in = st.text_input("key", type="password", placeholder="sk-ant-...",
-                           value=st.session_state.api_key, label_visibility="collapsed")
-    if api_in:
-        st.session_state.api_key = api_in
-        st.success("Connected")
 
-    st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
     # Stats
     papers   = db_papers()
