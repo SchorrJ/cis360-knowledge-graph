@@ -661,15 +661,66 @@ SCHEMA:
 
 Knowledge Graph: {graph}"""
 
+U3_PROMPT = """You are analyzing a research paper to extract U3 (Analysis Uncertainty) tags.
+U3 = limitations of the ALGORITHM or MODEL itself.
+
+For each fusion method listed below, find the U3 uncertainty from the paper text.
+Search the conclusions, discussion, limitations, and future work sections specifically.
+
+Look for ANY of:
+- Model only tested on specific datasets, may not generalize
+- Deep learning is a black box, cannot explain decisions
+- Assumes specific data properties (linear, Gaussian, stationary)
+- Performance degrades in edge cases or high missing-data scenarios
+- Tucker/matrix decomposition not suitable for large-scale data
+- Training data is limited or small
+- Hyperparameters require manual tuning
+- Author states future work or open problems
+- Computational cost limits applicability
+- Model bias toward majority class
+
+Methods to tag: {methods}
+
+Paper text (end section — conclusions/discussion/limitations):
+{end_text}
+
+Return ONLY a JSON object mapping MethodName to U3 string. If genuinely none found, use empty string.
+Example: {{"M-LSTM": "Black-box deep learning model cannot explain feature importance; only tested on UK fleet data", "Cox PHM": "Assumes proportional hazards which may not hold for all failure types"}}
+"""
+
 def extract_paper(text):
-    # Send first 10000 chars (abstract, intro, methods) AND last 6000 chars
-    # (results, discussion, conclusion, limitations) to catch U3 at end of paper
+    # Step 1: Main extraction using first + last sections
     if len(text) > 16000:
         combined = text[:10000] + "\n\n[...middle section omitted...]\n\n" + text[-6000:]
     else:
         combined = text
     raw = call_api(EXTRACT_PROMPT.format(text=combined), 2500)
-    return json.loads(raw.replace("```json","").replace("```","").strip())
+    parsed = json.loads(raw.replace("```json","").replace("```","").strip())
+
+    # Step 2: Focused U3 pass — send only the last 8000 chars targeting conclusions/limitations
+    methods = parsed.get("fusion_methods", [])
+    if methods:
+        method_names = [m.get("MethodName","") for m in methods]
+        end_text = text[-8000:] if len(text) > 8000 else text
+        try:
+            u3_raw = call_api(U3_PROMPT.format(
+                methods=", ".join(method_names),
+                end_text=end_text
+            ), 800)
+            u3_map = json.loads(u3_raw.replace("```json","").replace("```","").strip())
+            # Merge U3 back into methods — override empty ones, keep existing if already filled
+            for m in methods:
+                name = m.get("MethodName","")
+                existing_u3 = m.get("U3","")
+                new_u3 = u3_map.get(name,"") or u3_map.get(name.split()[0],"")
+                if new_u3 and not existing_u3:
+                    m["U3"] = new_u3
+                elif new_u3 and existing_u3:
+                    pass  # keep existing
+        except Exception:
+            pass  # if second pass fails, keep whatever was extracted in step 1
+
+    return parsed
 
 def ingest_parsed(parsed):
     ds = parsed.get("doi_sheet", {})
