@@ -538,7 +538,7 @@ try:
 except Exception:
     pass
 
-for k, v in {"api_key": _default_key, "suggestions": [], "show_sug": True}.items():
+for k, v in {"api_key": _default_key, "suggestions": [], "show_sug": True, "selected_doi": "all"}.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -702,8 +702,14 @@ def ingest_parsed(parsed):
 
 def refresh_suggestions():
     import random, time
-    methods  = db_methods()
-    datasets = db_datasets()
+    sel = st.session_state.get("selected_doi", "all")
+    all_methods  = db_methods()
+    all_datasets = db_datasets()
+    if sel != "all":
+        methods  = [m for m in all_methods  if m["DOI"] == sel]
+        datasets = [d for d in all_datasets if d["DOI"] == sel]
+    else:
+        methods, datasets = all_methods, all_datasets
     if not methods and not datasets: return []
     summary = json.dumps({
         "methods": [{"name": m["MethodName"],
@@ -745,8 +751,18 @@ def refresh_suggestions():
         return []
 
 def query_graph(q):
+    all_papers   = db_papers()
+    all_methods  = db_methods()
+    all_datasets = db_datasets()
+    sel = st.session_state.get("selected_doi", "all")
+    if sel != "all":
+        papers_f   = [p for p in all_papers   if p["DOI"] == sel]
+        methods_f  = [m for m in all_methods  if m["DOI"] == sel]
+        datasets_f = [d for d in all_datasets if d["DOI"] == sel]
+    else:
+        papers_f, methods_f, datasets_f = all_papers, all_methods, all_datasets
     graph = json.dumps({
-        "papers": db_papers(), "fusion_methods": db_methods(), "datasets": db_datasets()
+        "papers": papers_f, "fusion_methods": methods_f, "datasets": datasets_f
     })[:8000]
     raw = call_api(QUERY_SYSTEM.format(graph=graph) + f"\n\nQuery: {q}", 1200)
     lines = raw.split("\n")
@@ -942,19 +958,36 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"Extraction failed: {e}")
 
-    # Loaded papers
+    # Loaded papers — clickable selectors
     if papers:
         st.markdown('<hr class="divider">', unsafe_allow_html=True)
-        st.markdown('<div class="section-label">Loaded papers</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Select paper to focus on</div>', unsafe_allow_html=True)
+
+        # All papers button
+        sel = st.session_state.get("selected_doi", "all")
+        all_active = sel == "all"
+        if st.button(
+            ("[ ALL PAPERS ]" if all_active else "All papers"),
+            key="sel_all",
+            use_container_width=True
+        ):
+            st.session_state.selected_doi = "all"
+            st.session_state.suggestions = []
+            st.rerun()
+
         for p in papers:
             has_u1 = any(m["U1"] for m in methods  if m["DOI"] == p["DOI"])
             has_u2 = any(d["U2"] for d in datasets if d["DOI"] == p["DOI"])
             has_u3 = any(m["U3"] for m in methods  if m["DOI"] == p["DOI"])
             fuse   = p["IsDataFusionPaper"] == "Yes"
+            is_selected = sel == p["DOI"]
             pill   = '<span class="pill pill-fusion">fusion</span>' if fuse else '<span class="pill pill-nonfusion">non-fusion</span>'
+            border_color = "#7c6af7" if is_selected else "var(--border)"
+            bg_color = "rgba(124,106,247,0.08)" if is_selected else "var(--surface2)"
+            active_label = '<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#7c6af7;letter-spacing:0.08em"> ACTIVE</span>' if is_selected else ""
             st.markdown(f"""
-            <div class="paper-card">
-                <div class="paper-title">{p['Title']}</div>
+            <div class="paper-card" style="border-color:{border_color};background:{bg_color};cursor:pointer">
+                <div class="paper-title">{p['Title']}{active_label}</div>
                 <div class="paper-meta">{p.get('PublicationDate','—')} &nbsp;{pill}</div>
                 <div class="u-dots">
                     <div class="u-dot" style="background:{'#f0a654' if has_u1 else '#2a2a38'}"></div>
@@ -963,6 +996,14 @@ with st.sidebar:
                     <span class="u-label">U1 · U2 · U3</span>
                 </div>
             </div>""", unsafe_allow_html=True)
+            btn_label = f"Selected: {p['Title'][:30]}..." if is_selected else f"Focus on this paper"
+            if st.button(btn_label, key=f"sel_{p['DOI']}", use_container_width=True):
+                st.session_state.selected_doi = p["DOI"]
+                st.session_state.suggestions = []
+                with st.spinner("Generating suggestions for this paper..."):
+                    try: st.session_state.suggestions = refresh_suggestions()
+                    except: pass
+                st.rerun()
 
     st.markdown('<hr class="divider">', unsafe_allow_html=True)
     if st.button("Clear database", use_container_width=True):
@@ -984,6 +1025,33 @@ tab_nav, tab_graph, tab_data = st.tabs([
 
 # ── NAVIGATE ──────────────────────────────────────────────────────────────────
 with tab_nav:
+
+    # Active paper banner
+    sel_doi = st.session_state.get("selected_doi", "all")
+    if sel_doi != "all":
+        all_papers = db_papers()
+        sel_paper = next((p for p in all_papers if p["DOI"] == sel_doi), None)
+        if sel_paper:
+            st.markdown(f"""
+            <div style="background:rgba(124,106,247,0.1);border:1px solid rgba(124,106,247,0.35);
+                        border-left:3px solid #7c6af7;border-radius:8px;padding:10px 16px;
+                        margin-bottom:12px;display:flex;align-items:center;gap:12px">
+                <div style="font-family:DM Mono,monospace;font-size:0.62rem;color:#7c6af7;
+                            text-transform:uppercase;letter-spacing:0.1em;white-space:nowrap">Focused on</div>
+                <div style="font-family:DM Sans,sans-serif;font-size:0.84rem;font-weight:500;
+                            color:#a594f9;word-wrap:break-word;overflow-wrap:break-word">{sel_paper['Title']}</div>
+            </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="background:rgba(45,212,160,0.06);border:1px solid rgba(45,212,160,0.2);
+                    border-left:3px solid #2dd4a0;border-radius:8px;padding:8px 16px;
+                    margin-bottom:12px;display:flex;align-items:center;gap:12px">
+            <div style="font-family:DM Mono,monospace;font-size:0.62rem;color:#2dd4a0;
+                        text-transform:uppercase;letter-spacing:0.1em">Scope</div>
+            <div style="font-family:DM Sans,sans-serif;font-size:0.84rem;color:var(--muted)">
+                All papers — select a paper in the sidebar to focus queries
+            </div>
+        </div>""", unsafe_allow_html=True)
 
     # Suggestions row
     if st.session_state.suggestions:
