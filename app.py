@@ -812,10 +812,41 @@ def query_graph(q):
         datasets_f = [d for d in all_datasets if d["DOI"] == sel]
     else:
         papers_f, methods_f, datasets_f = all_papers, all_methods, all_datasets
+    # Build a smart compact graph that keeps ALL uncertainty fields visible
+    # rather than blindly truncating JSON which cuts off U2/U3 values
+    def trim(s, n=120): return (s[:n] + "...") if s and len(s) > n else (s or "")
+
+    compact_papers = [
+        {"DOI": p["DOI"], "Title": p["Title"], "Author": p.get("Author",""),
+         "FieldOfStudy": p.get("FieldOfStudy",""), "IsDataFusion": p.get("IsDataFusionPaper",""),
+         "Year": p.get("PublicationDate","")}
+        for p in papers_f
+    ]
+    compact_methods = [
+        {"MethodKey": m["MethodKey"], "MethodName": m["MethodName"], "DOI": m["DOI"],
+         "Description": trim(m.get("Description",""), 100),
+         "U1": trim(m.get("U1",""), 200),
+         "U3": trim(m.get("U3",""), 200)}
+        for m in methods_f
+    ]
+    compact_datasets = [
+        {"id": d["id"], "DOI": d["DOI"], "DataName": d["DataName"],
+         "MethodKey": d.get("MethodKey",""), "DataType": d.get("DataType",""),
+         "SensorType": d.get("SensorType",""),
+         "SpatialCoverage": trim(d.get("SpatialCoverage",""), 60),
+         "TemporalCoverage": trim(d.get("TemporalCoverage",""), 60),
+         "U2": trim(d.get("U2",""), 250)}
+        for d in datasets_f
+    ]
     graph = json.dumps({
-        "papers": papers_f, "fusion_methods": methods_f, "datasets": datasets_f
-    })[:8000]
-    raw = call_api(QUERY_SYSTEM.format(graph=graph) + f"\n\nQuery: {q}", 1200)
+        "papers": compact_papers,
+        "fusion_methods": compact_methods,
+        "datasets": compact_datasets
+    })
+    # Only truncate if truly enormous (>20k chars)
+    if len(graph) > 20000:
+        graph = graph[:20000]
+    raw = call_api(QUERY_SYSTEM.format(graph=graph) + f"\n\nQuery: {q}", 1500)
     lines = raw.split("\n")
     src_idx = next((i for i,l in enumerate(lines) if l.lower().startswith("source:")), None)
     if src_idx is not None:
