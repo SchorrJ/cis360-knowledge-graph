@@ -958,8 +958,8 @@ with st.sidebar:
 # ==============================================================================
 # MAIN TABS
 # ==============================================================================
-tab_nav, tab_graph, tab_sql, tab_data = st.tabs([
-    "Navigate", "Graph", "SQL", "Data"
+tab_nav, tab_graph, tab_data = st.tabs([
+    "Navigate", "Graph", "Data"
 ])
 
 # ── NAVIGATE ──────────────────────────────────────────────────────────────────
@@ -990,7 +990,7 @@ with tab_nav:
 
         st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
-    # Stakeholder queries
+    # Stakeholder queries — matched exactly to rubric requirements
     st.markdown('<div class="section-label">Required stakeholder queries</div>', unsafe_allow_html=True)
     sq1, sq2, sq3 = st.columns(3)
 
@@ -1003,27 +1003,39 @@ with tab_nav:
 
     with sq1:
         st.markdown("""<div class="stakeholder-card">
-            <div class="stakeholder-icon">query_01</div>
-            <div class="stakeholder-title">Linkage — methods & datasets</div>
+            <div class="stakeholder-icon">query_01 — Linkage</div>
+            <div class="stakeholder-title">Find all fusion methods applied to Traffic Data and show their linked datasets</div>
         </div>""", unsafe_allow_html=True)
         if st.button("Run Linkage Query", key="sq1", use_container_width=True):
-            run_stakeholder("Linkage Query: for each fusion method, list all datasets linked via MethodKey", "linkage")
+            run_stakeholder(
+                "Linkage Query: Show me all fusion methods used for Traffic Data. "
+                "For each method, list all datasets it is linked to via MethodKey. "
+                "This demonstrates graph traversal — finding which methods connect to which datasets.",
+                "linkage")
 
     with sq2:
         st.markdown("""<div class="stakeholder-card">
-            <div class="stakeholder-icon">query_02</div>
-            <div class="stakeholder-title">Uncertainty — U2 by data type</div>
+            <div class="stakeholder-icon">query_02 — Uncertainty</div>
+            <div class="stakeholder-title">List all papers reporting U2 measurement uncertainty, grouped by sensor type</div>
         </div>""", unsafe_allow_html=True)
         if st.button("Run Uncertainty Query", key="sq2", use_container_width=True):
-            run_stakeholder("Uncertainty Query: list all datasets with U2 measurement uncertainty, grouped by data type", "uncertainty")
+            run_stakeholder(
+                "Uncertainty Query: List all papers that report U2 (Measurement) uncertainty. "
+                "Group the results by sensor type or data type. "
+                "Show the paper title, dataset name, sensor type, and the specific U2 uncertainty description.",
+                "uncertainty")
 
     with sq3:
         st.markdown("""<div class="stakeholder-card">
-            <div class="stakeholder-icon">query_03</div>
-            <div class="stakeholder-title">Discovery — most connected dataset</div>
+            <div class="stakeholder-icon">query_03 — Discovery</div>
+            <div class="stakeholder-title">Find the most popular dataset — most connections to different methods</div>
         </div>""", unsafe_allow_html=True)
         if st.button("Run Discovery Query", key="sq3", use_container_width=True):
-            run_stakeholder("Discovery Query: which dataset has the most connections to different methods?", "discovery")
+            run_stakeholder(
+                "Discovery Query: Which dataset in the knowledge graph has the most connections to different fusion methods? "
+                "Rank all datasets by how many distinct methods they are linked to. "
+                "This demonstrates aggregation across the graph.",
+                "discovery")
 
     st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
@@ -1088,61 +1100,150 @@ with tab_graph:
         st.components.v1.html(build_graph_html(), height=640, scrolling=False)
 
 
-# ── SQL ────────────────────────────────────────────────────────────────────────
-with tab_sql:
-    st.markdown('<div class="section-label">SQL queries against knowledge_graph.db</div>',
-                unsafe_allow_html=True)
-    selected = st.selectbox("Query", list(DEMO_QUERIES.keys()), label_visibility="collapsed")
-    sql_in   = st.text_area("SQL", value=DEMO_QUERIES[selected], height=140, label_visibility="collapsed")
-
-    if st.button("Run query", use_container_width=False):
-        if not db_papers():
-            st.warning("Ingest at least one paper first.")
-        else:
-            result = run_sql(sql_in)
-            if isinstance(result, str):
-                st.error(f"SQL error: {result}")
-            elif result.empty:
-                st.info("Query returned no results.")
-            else:
-                st.success(f"{len(result)} row(s) returned")
-                st.dataframe(result, use_container_width=True, hide_index=True)
-                st.download_button("Download CSV", data=result.to_csv(index=False).encode(),
-                                   file_name="query_result.csv", mime="text/csv")
-
-
-# ── DATA ───────────────────────────────────────────────────────────────────────
+# ── DATA ─────────────────────────────────────────────────────────────────────
 with tab_data:
     papers   = db_papers()
     methods  = db_methods()
     datasets = db_datasets()
+
     if not papers:
         st.markdown("""<div class="welcome-box">
             <div class="welcome-title">No data yet</div>
-            <div class="welcome-text">Ingest papers to see extracted data.</div>
+            <div class="welcome-text">Ingest papers using the sidebar to see extracted data.</div>
         </div>""", unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="section-label">{len(papers)} paper(s) | {len(methods)} method(s) | {len(datasets)} dataset(s) - knowledge_graph.db</div>',
-                    unsafe_allow_html=True)
-        dc1, dc2, dc3 = st.columns(3)
-        with dc1:
-            st.download_button("Download DOI sheet", data=to_csv(papers),
-                               file_name="DOI_sheet.csv", mime="text/csv", use_container_width=True)
-        with dc2:
-            st.download_button("Download Fusion_Method sheet", data=to_csv(methods),
-                               file_name="Fusion_Method_sheet.csv", mime="text/csv", use_container_width=True)
-        with dc3:
-            st.download_button("Download Data sheet", data=to_csv(datasets),
-                               file_name="Data_sheet.csv", mime="text/csv", use_container_width=True)
+        # ── Top stats row ──
+        st.markdown(f"""
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center">
+                <div style="font-family:Syne,sans-serif;font-size:2rem;font-weight:700;color:var(--green)">{len(papers)}</div>
+                <div style="font-family:DM Mono,monospace;font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Papers</div>
+            </div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center">
+                <div style="font-family:Syne,sans-serif;font-size:2rem;font-weight:700;color:var(--accent2)">{len(methods)}</div>
+                <div style="font-family:DM Mono,monospace;font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Fusion Methods</div>
+            </div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center">
+                <div style="font-family:Syne,sans-serif;font-size:2rem;font-weight:700;color:var(--amber)">{len(datasets)}</div>
+                <div style="font-family:DM Mono,monospace;font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Datasets</div>
+            </div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center">
+                <div style="font-family:Syne,sans-serif;font-size:2rem;font-weight:700;color:var(--red)">{db_count_u()}</div>
+                <div style="font-family:DM Mono,monospace;font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Uncertainty Tags</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ── Insights panel ──
+        if methods and datasets:
+            st.markdown('<div class="section-label">Knowledge graph insights</div>', unsafe_allow_html=True)
+
+            # Most connected dataset
+            from collections import Counter
+            ds_method_counts = Counter(d["DataName"] for d in datasets if d["MethodKey"])
+            top_dataset = ds_method_counts.most_common(1)
+
+            # Fusion papers count
+            fusion_count = sum(1 for p in papers if p.get("IsDataFusionPaper") == "Yes")
+
+            # U2 coverage
+            u2_count = sum(1 for d in datasets if d.get("U2"))
+            u1_count = sum(1 for m in methods if m.get("U1"))
+            u3_count = sum(1 for m in methods if m.get("U3"))
+
+            # Data types
+            dtypes = Counter(d["DataType"] for d in datasets if d.get("DataType"))
+            top_dtype = dtypes.most_common(1)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"""
+                <div class="paper-card" style="margin-bottom:10px">
+                    <div class="section-label">Fusion classification</div>
+                    <div style="display:flex;gap:16px;margin-top:8px">
+                        <div>
+                            <div style="font-family:Syne,sans-serif;font-size:1.4rem;font-weight:700;color:var(--green)">{fusion_count}</div>
+                            <div style="font-family:DM Mono,monospace;font-size:0.65rem;color:var(--muted)">Data fusion papers</div>
+                        </div>
+                        <div>
+                            <div style="font-family:Syne,sans-serif;font-size:1.4rem;font-weight:700;color:var(--red)">{len(papers)-fusion_count}</div>
+                            <div style="font-family:DM Mono,monospace;font-size:0.65rem;color:var(--muted)">Non-fusion papers</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="paper-card">
+                    <div class="section-label">Uncertainty coverage</div>
+                    <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
+                        <div style="background:rgba(240,166,84,0.1);border:1px solid rgba(240,166,84,0.25);border-radius:6px;padding:8px 12px;text-align:center">
+                            <div style="font-family:Syne,sans-serif;font-size:1.2rem;font-weight:700;color:var(--amber)">{u1_count}</div>
+                            <div style="font-family:DM Mono,monospace;font-size:0.6rem;color:var(--amber)">U1 Conception</div>
+                        </div>
+                        <div style="background:rgba(240,106,106,0.1);border:1px solid rgba(240,106,106,0.25);border-radius:6px;padding:8px 12px;text-align:center">
+                            <div style="font-family:Syne,sans-serif;font-size:1.2rem;font-weight:700;color:var(--red)">{u2_count}</div>
+                            <div style="font-family:DM Mono,monospace;font-size:0.6rem;color:var(--red)">U2 Measurement</div>
+                        </div>
+                        <div style="background:rgba(165,148,249,0.1);border:1px solid rgba(165,148,249,0.25);border-radius:6px;padding:8px 12px;text-align:center">
+                            <div style="font-family:Syne,sans-serif;font-size:1.2rem;font-weight:700;color:var(--accent2)">{u3_count}</div>
+                            <div style="font-family:DM Mono,monospace;font-size:0.6rem;color:var(--accent2)">U3 Analysis</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                top_ds_name = top_dataset[0][0] if top_dataset else "N/A"
+                top_ds_count = top_dataset[0][1] if top_dataset else 0
+                top_type = top_dtype[0][0] if top_dtype else "N/A"
+                st.markdown(f"""
+                <div class="paper-card" style="margin-bottom:10px">
+                    <div class="section-label">Most connected dataset</div>
+                    <div style="margin-top:8px">
+                        <div style="font-family:Syne,sans-serif;font-size:1rem;font-weight:700;color:var(--amber);word-wrap:break-word">{top_ds_name}</div>
+                        <div style="font-family:DM Mono,monospace;font-size:0.65rem;color:var(--muted);margin-top:4px">{top_ds_count} method connection(s)</div>
+                    </div>
+                </div>
+                <div class="paper-card">
+                    <div class="section-label">Most common data type</div>
+                    <div style="margin-top:8px">
+                        <div style="font-family:Syne,sans-serif;font-size:1rem;font-weight:700;color:var(--accent2);word-wrap:break-word">{top_type}</div>
+                        <div style="font-family:DM Mono,monospace;font-size:0.65rem;color:var(--muted);margin-top:4px">{dtypes.get(top_type, 0)} dataset(s) of this type</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
         st.markdown('<hr class="divider">', unsafe_allow_html=True)
-        s1, s2, s3 = st.tabs(["papers", "fusion_methods", "datasets"])
+
+        # ── Downloads ──
+        st.markdown('<div class="section-label">Download extracted data</div>', unsafe_allow_html=True)
+        dc1, dc2, dc3 = st.columns(3)
+        with dc1:
+            st.download_button("Download DOI sheet",
+                               data=to_csv(papers), file_name="DOI_sheet.csv",
+                               mime="text/csv", use_container_width=True)
+        with dc2:
+            st.download_button("Download Fusion_Method sheet",
+                               data=to_csv(methods), file_name="Fusion_Method_sheet.csv",
+                               mime="text/csv", use_container_width=True)
+        with dc3:
+            st.download_button("Download Data sheet",
+                               data=to_csv(datasets), file_name="Data_sheet.csv",
+                               mime="text/csv", use_container_width=True)
+
+        st.markdown('<hr class="divider">', unsafe_allow_html=True)
+
+        # ── Table viewer ──
+        st.markdown('<div class="section-label">Browse database tables</div>', unsafe_allow_html=True)
+        s1, s2, s3 = st.tabs(["Papers", "Fusion Methods", "Datasets"])
         with s1:
-            st.markdown('<div class="section-label">SELECT * FROM papers</div>', unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame(papers), use_container_width=True, hide_index=True)
+            st.markdown('<div class="section-label">papers table</div>', unsafe_allow_html=True)
+            # Show clean subset of columns
+            df = pd.DataFrame(papers)[["Title","Author","PublicationDate","FieldOfStudy","IsDataFusionPaper","DataFusionClassificationReason"]] if papers else pd.DataFrame()
+            st.dataframe(df, use_container_width=True, hide_index=True)
         with s2:
-            st.markdown('<div class="section-label">SELECT * FROM fusion_methods</div>', unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame(methods), use_container_width=True, hide_index=True)
+            st.markdown('<div class="section-label">fusion_methods table</div>', unsafe_allow_html=True)
+            df = pd.DataFrame(methods)[["MethodName","Description","U1","U3","OutputData"]] if methods else pd.DataFrame()
+            st.dataframe(df, use_container_width=True, hide_index=True)
         with s3:
-            st.markdown('<div class="section-label">SELECT * FROM datasets</div>', unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame(datasets), use_container_width=True, hide_index=True)
+            st.markdown('<div class="section-label">datasets table</div>', unsafe_allow_html=True)
+            df = pd.DataFrame(datasets)[["DataName","DataType","SensorType","SpatialCoverage","TemporalCoverage","U2","Provenance"]] if datasets else pd.DataFrame()
+            st.dataframe(df, use_container_width=True, hide_index=True)
