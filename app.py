@@ -592,9 +592,23 @@ Example phrases: "missing values were removed", "linear approximation", "sampled
 "collected from nearby stations", "resolution", "noise", "signal-to-noise"
 
 U3 (Analysis uncertainty): Limitations of the ALGORITHM or MODEL itself.
-Look for: model assumptions, overfitting risk, generalization limits, black-box nature, training data bias.
-Example phrases: "assumes linear", "black-box", "limited generalization", "may not generalize",
-"training error", "dropout", "overfitting", "bias"
+THIS IS THE MOST IMPORTANT FIELD FOR FUSION METHODS. Every machine learning or algorithmic paper
+has U3 uncertainty — no model is perfect. Search for ALL of these:
+- Model assumes something about the data (linear degradation, Gaussian noise, stationarity)
+- Results only tested on specific datasets, may not generalize
+- Deep learning / neural network is a black box
+- Overfitting risk, dropout used to prevent overfitting
+- Performance degrades at high missing rates or edge cases
+- Computational constraints limit model size or depth
+- Author explicitly states limitations or future work
+- Model only suitable for specific conditions (e.g. "only suitable for CNC lathe")
+- Tucker decomposition "not suitable for large-scale tensors"
+- Training data bias, small dataset size
+Example phrases: "may not generalize", "limited to", "only suitable for", "black-box", "assumes",
+"future work", "limitation", "constrained by", "dataset is limited", "not suitable for",
+"performance degrades", "low universality", "further research needed"
+
+Do NOT leave U3 empty. Every fusion method paper has model limitations — find them.
 
 For EVERY dataset, search the full paper text for any mention of that dataset having
 measurement problems, approximations, missing data, or collection limitations.
@@ -648,7 +662,13 @@ SCHEMA:
 Knowledge Graph: {graph}"""
 
 def extract_paper(text):
-    raw = call_api(EXTRACT_PROMPT.format(text=text[:12000]), 2000)
+    # Send first 10000 chars (abstract, intro, methods) AND last 6000 chars
+    # (results, discussion, conclusion, limitations) to catch U3 at end of paper
+    if len(text) > 16000:
+        combined = text[:10000] + "\n\n[...middle section omitted...]\n\n" + text[-6000:]
+    else:
+        combined = text
+    raw = call_api(EXTRACT_PROMPT.format(text=combined), 2500)
     return json.loads(raw.replace("```json","").replace("```","").strip())
 
 def ingest_parsed(parsed):
