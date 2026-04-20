@@ -944,12 +944,17 @@ const sim=d3.forceSimulation(nodes)
   .force('charge',d3.forceManyBody().strength(-380))
   .force('center',d3.forceCenter(W/2,H/2))
   .force('collision',d3.forceCollide().radius(d=>radius[d.type]+24));
-const link=svg.append('g').selectAll('line').data(edges).join('line')
+
+// Single wrapper group — zoom transform applies here only
+const g = svg.append('g').attr('class','graph-root');
+
+const link=g.append('g').selectAll('line').data(edges).join('line')
   .attr('stroke',d=>{{const s=nodes.find(n=>n.id===(typeof d.source==='object'?d.source.id:d.source));return s?color[s.type]:'#444';}})
   .attr('stroke-width',1).attr('stroke-opacity',0.4)
   .attr('marker-end',d=>{{const s=nodes.find(n=>n.id===(typeof d.source==='object'?d.source.id:d.source));return s?`url(#arr-${{s.type}})`:'none';}});
-const node=svg.append('g').selectAll('g').data(nodes).join('g').style('cursor','grab')
+const node=g.append('g').selectAll('g').data(nodes).join('g').style('cursor','grab')
   .call(d3.drag()
+    .filter(e=>!e.ctrlKey && !e.button)
     .on('start',(e,d)=>{{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;}})
     .on('drag',(e,d)=>{{d.fx=e.x;d.fy=e.y;}})
     .on('end',(e,d)=>{{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;}}));
@@ -968,17 +973,14 @@ sim.on('tick',()=>{{
   link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
     .attr('x2',d=>{{const dx=d.target.x-d.source.x,dy=d.target.y-d.source.y,dist=Math.sqrt(dx*dx+dy*dy)||1;return d.target.x-(dx/dist)*(radius[d.target.type]+4);}})
     .attr('y2',d=>{{const dx=d.target.x-d.source.x,dy=d.target.y-d.source.y,dist=Math.sqrt(dx*dx+dy*dy)||1;return d.target.y-(dy/dist)*(radius[d.target.type]+4);}});
-  node.attr('transform',d=>`translate(${{Math.max(24,Math.min(W-24,d.x))}},${{Math.max(24,Math.min(H-24,d.y))}})`);
+  node.attr('transform',d=>`translate(${{d.x}},${{d.y}})`);
 }});
 
-// Zoom & pan
-const zoomG = svg.insert('g',':first-child').attr('class','zoom-layer');
-const allContent = svg.selectAll('g:not(.zoom-layer)');
-
+// Zoom & pan — only moves the graph-root group
 const zoom = d3.zoom()
-  .scaleExtent([0.2, 4])
+  .scaleExtent([0.15, 5])
   .on('zoom', (e) => {{
-    allContent.attr('transform', e.transform);
+    g.attr('transform', e.transform);
   }});
 svg.call(zoom);
 
