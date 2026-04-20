@@ -902,8 +902,9 @@ def build_graph_html():
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
 * {{ box-sizing:border-box; margin:0; padding:0; }}
-body {{ background:#0a0a0f; font-family:'DM Mono',monospace; }}
-#g {{ width:100%; height:560px; }}
+body {{ background:#0a0a0f; font-family:'DM Mono',monospace; position:relative; }}
+#g {{ width:100%; height:560px; cursor:grab; }}
+#g:active {{ cursor:grabbing; }}
 .legend {{ display:flex; gap:20px; padding:10px 16px; font-size:11px; color:#8888a8;
            background:#111118; border-bottom:1px solid #2a2a38; align-items:center; }}
 .ld {{ width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:5px; }}
@@ -969,7 +970,39 @@ sim.on('tick',()=>{{
     .attr('y2',d=>{{const dx=d.target.x-d.source.x,dy=d.target.y-d.source.y,dist=Math.sqrt(dx*dx+dy*dy)||1;return d.target.y-(dy/dist)*(radius[d.target.type]+4);}});
   node.attr('transform',d=>`translate(${{Math.max(24,Math.min(W-24,d.x))}},${{Math.max(24,Math.min(H-24,d.y))}})`);
 }});
-</script></body></html>"""
+
+// Zoom & pan
+const zoomG = svg.insert('g',':first-child').attr('class','zoom-layer');
+const allContent = svg.selectAll('g:not(.zoom-layer)');
+
+const zoom = d3.zoom()
+  .scaleExtent([0.2, 4])
+  .on('zoom', (e) => {{
+    allContent.attr('transform', e.transform);
+  }});
+svg.call(zoom);
+
+// Zoom button controls
+function zoomBy(factor) {{
+  svg.transition().duration(250).call(zoom.scaleBy, factor);
+}}
+function resetZoom() {{
+  svg.transition().duration(350).call(zoom.transform, d3.zoomIdentity);
+}}
+
+// Keyboard shortcuts
+svg.on('keydown', (e) => {{
+  if(e.key==='+' || e.key==='=') zoomBy(1.3);
+  if(e.key==='-') zoomBy(0.77);
+  if(e.key==='0') resetZoom();
+}});
+</script>
+<div id="zoombtns" style="position:absolute;bottom:14px;right:16px;display:flex;gap:6px;z-index:10">
+  <button onclick="zoomBy(1.3)" title="Zoom in" style="background:#1a1a24;border:1px solid #3a3a50;color:#a594f9;border-radius:6px;width:32px;height:32px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace">+</button>
+  <button onclick="zoomBy(0.77)" title="Zoom out" style="background:#1a1a24;border:1px solid #3a3a50;color:#a594f9;border-radius:6px;width:32px;height:32px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:DM Mono,monospace">-</button>
+  <button onclick="resetZoom()" title="Reset zoom" style="background:#1a1a24;border:1px solid #3a3a50;color:#8888a8;border-radius:6px;padding:0 10px;height:32px;font-size:10px;cursor:pointer;font-family:DM Mono,monospace;letter-spacing:0.06em">RESET</button>
+</div>
+</body></html>"""
 
 # ==============================================================================
 # SIDEBAR
