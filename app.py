@@ -1209,13 +1209,13 @@ with tab_nav:
     with sq1:
         st.markdown("""<div class="stakeholder-card">
             <div class="stakeholder-icon">query_01 — Linkage</div>
-            <div class="stakeholder-title">Find all fusion methods applied to Traffic Data and show their linked datasets</div>
+            <div class="stakeholder-title">Find fusion methods applied to more than one dataset — show all shared method connections</div>
         </div>""", unsafe_allow_html=True)
         if st.button("Run Linkage Query", key="sq1", use_container_width=True):
             run_stakeholder(
-                "Linkage Query: Show me all fusion methods used for Traffic Data. "
-                "For each method, list all datasets it is linked to via MethodKey. "
-                "This demonstrates graph traversal — finding which methods connect to which datasets.",
+                "Linkage Query: Find all fusion methods that have been applied to more than one dataset. "
+                "For each such method, list every dataset it is linked to via MethodKey, and name the paper it came from. "
+                "This demonstrates graph traversal — which methods serve as bridges connecting multiple datasets.",
                 "linkage")
 
     with sq2:
