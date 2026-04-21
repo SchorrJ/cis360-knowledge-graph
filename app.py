@@ -1236,11 +1236,37 @@ with tab_nav:
             <div class="stakeholder-title">Find the most popular dataset — most connections to different methods</div>
         </div>""", unsafe_allow_html=True)
         if st.button("Run Discovery Query", key="sq3", use_container_width=True):
-            run_stakeholder(
-                "Discovery Query: Which dataset in the knowledge graph has the most connections to different fusion methods? "
-                "Rank all datasets by how many distinct methods they are linked to. "
-                "This demonstrates aggregation across the graph.",
-                "discovery")
+            # Run SQL directly so we always get a real answer
+            conn = get_db()
+            rows = conn.execute("""
+                SELECT d.DataName, COUNT(DISTINCT d.MethodKey) as MethodCount,
+                       GROUP_CONCAT(DISTINCT fm.MethodName) as Methods,
+                       p.Title as Paper
+                FROM datasets d
+                LEFT JOIN fusion_methods fm ON d.MethodKey = fm.MethodKey
+                LEFT JOIN papers p ON d.DOI = p.DOI
+                GROUP BY d.DataName
+                ORDER BY MethodCount DESC
+            """).fetchall()
+            conn.close()
+            if rows:
+                result_lines = ["Discovery Query Results — Datasets ranked by method connections:\n"]
+                for i, r in enumerate(rows, 1):
+                    result_lines.append(
+                        f"{i}. {r[0]} — {r[1]} method connection(s)\n"
+                        f"   Methods: {r[2] or 'none linked'}\n"
+                        f"   Paper: {r[3]}\n"
+                    )
+                result_text = "\n".join(result_lines)
+                most_popular = rows[0]
+                result_text += f"\nMost popular dataset: {most_popular[0]} with {most_popular[1]} method connection(s)."
+                db_add_message("me", "Discovery Query: Which dataset has the most connections to different fusion methods? Rank all datasets.")
+                db_add_message("rn", result_text, "SQLite — datasets + fusion_methods JOIN")
+                st.rerun()
+            else:
+                db_add_message("me", "Discovery Query: Which dataset has the most connections to different fusion methods?")
+                db_add_message("rn", "No datasets found in the database. Please ingest papers first.", "")
+                st.rerun()
 
     st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
